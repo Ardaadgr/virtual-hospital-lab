@@ -1,0 +1,45 @@
+services:
+
+  hbys:
+    build: ./api/hbys
+    container_name: hbys
+    ports:
+      - "8000:8000"
+    networks:
+      clinical-net:
+        ipv4_address: 10.10.10.10
+
+  pacs:
+    build: ./api/pacs
+    container_name: pacs
+    ports:
+      - "8001:8000"
+    networks:
+      clinical-net:
+        ipv4_address: 10.10.10.11
+
+  staff:
+    build: ./api/staff
+    container_name: staff
+    ports:
+      - "8002:8000"
+    networks:
+      management-net:
+        ipv4_address: 10.10.30.10
+
+networks:
+  clinical-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.10.0/24
+  security-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.20.0/24
+  management-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.30.0/24
