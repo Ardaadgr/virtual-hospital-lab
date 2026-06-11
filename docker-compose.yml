@@ -45,6 +45,28 @@ services:
       management-net:
         ipv4_address: 10.10.30.10
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: hospital_db
+    ports:
+      - "5432:5432"
+    networks:
+      clinical-net:
+        ipv4_address: 10.10.10.20
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      clinical-net:
+        ipv4_address: 10.10.10.21
+
 networks:
   clinical-net:
     driver: bridge
