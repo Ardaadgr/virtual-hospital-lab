@@ -1,5 +1,23 @@
 services:
 
+  core-router:
+    image: alpine:latest
+    container_name: core-router
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+    command: >
+      sh -c "apk add --no-cache iptables tcpdump iptables-openrc && tail -f /dev/null"
+    networks:
+      clinical-net:
+        ipv4_address: 10.10.10.254
+      security-net:
+        ipv4_address: 10.10.20.254
+      management-net:
+        ipv4_address: 10.10.30.254
+
   hbys:
     build: ./api/hbys
     container_name: hbys
