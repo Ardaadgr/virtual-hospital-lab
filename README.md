@@ -1,63 +1,108 @@
-# Virtual Hospital Lab (Health IT & DevSecOps Test Bed)
+# Sanal Hastane (Virtual Hospital)
 
-This project is a fully isolated virtual simulation of a real Hospital Network and its clinical systems (HBYS, PACS, etc.). It is designed with a professional DevSecOps approach to test cybersecurity analysis, network management (VLAN/Routing), and clinical integration (HL7/FHIR) scenarios.
+Kurumsal düzeyde, gerçekçi bir sanal hastane ortamı. Dört bilgi sistemi ve
+bunları birbirine bağlayan bir arşiv katmanı:
 
-## System Architecture
+| Sistem | Açıklama |
+|---|---|
+| HBYS | Hastane Bilgi Yönetim Sistemi (hasta kabul, MRN, ziyaret, poliklinik) |
+| LIS | Laboratuvar Bilgi Sistemi (biyokimya, mikrobiyoloji, oto-onay) |
+| PACS | Radyoloji görüntüleme (MR, CT, DX) |
+| PMS | Patoloji Yönetim Sistemi (numune/blok/lam takibi, dijital slide) |
+| VNA | Vendor Neutral Archive (radyoloji ve patoloji görüntüleri tek arşivde) |
 
-The architecture consists of completely isolated virtual networks (VLAN simulation) running on Docker:
+Sistemler asenkron mesajlaşma (HL7 v2.5 + RabbitMQ) ile konuşur. Mimari
+kararların tamamı `ARCHITECTURE.md` içindedir.
 
-- clinical-net (10.10.10.x): An isolated network containing the Hospital Information System (HBYS), PACS, PostgreSQL, and Redis.
-- security-net (10.10.20.x): Network for future Suricata (IDS) and Wazuh (SIEM) deployments.
-- management-net (10.10.30.x): The network for staff computers and monitoring dashboards.
-- core-router: A virtual router connecting all isolated networks and enforcing firewall rules.
+## DURUM: Bu bir iskelettir, çalışan bir sistem değildir
 
-## Running the Project
+Dürüst olmak gerekirse: **bu kod henüz derlenmedi.** Hazırlandığı ortamda .NET
+SDK yoktu. Kod elle yazıldı ve gözden geçirildi, ancak `dotnet build`
+çalıştırılmadı. Derleme hatası çıkması beklenir; ilk iş bunları temizlemektir.
 
-You can start the entire infrastructure with a single command. All databases, background services, and network isolation rules are automatically configured by Docker.
+Ne var:
+- Mimari kararlar (`ARCHITECTURE.md`), Claude Code yapılandırması (`.claude/`)
+- SharedKernel: `Entity`, `AggregateRoot`, `ValueObject`, `IDomainEvent`, `IClock`
+- HBYS Domain: `Patient`, `Encounter`, `MedicalRecordNumber`, `NationalIdentifier`
+- Patoloji Domain (tam): `PathologyCase` aggregate, `Specimen`, `Block`, `Slide`,
+  `DigitalSlide`, `Consultation`, `StageTransition`, `AccessionCode`,
+  `StageTransitionPolicy`
+- `VirtualHospital.Contracts`: sistemler arası mesaj sözleşmeleri
+- Patoloji domain birim testleri (yazıldı, koşturulmadı)
+- Docker Compose: PostgreSQL, RabbitMQ, Keycloak, MinIO, Orthanc
 
-Requirements:
-- Docker Desktop must be installed and running on your machine.
+Ne yok (Claude Code ile yapılacak):
+- Application katmanı (MediatR command/query/handler/validator)
+- Infrastructure (EF Core DbContext, Fluent API mapping, repository, migration)
+- Api katmanı (controller, yetkilendirme, middleware)
+- LIS, PACS, VNA domain modelleri
+- HL7 ayrıştırıcı ve MassTransit consumer'ları
+- Frontend (React viewer)
 
-Start Command:
-Open a terminal in the project directory and run the following command:
+## Kurulum
 
 ```bash
-docker-compose up --build -d
+docker compose up -d      # PostgreSQL, RabbitMQ, Keycloak, MinIO, Orthanc
+dotnet restore
+dotnet build              # ILK İŞ BU. Hataları temizle.
+dotnet test
 ```
 
-## Accessing Services
+UYARI: `docker-compose.yml` içindeki parolalar yalnızca yerel geliştirme
+içindir. Üretimde ortam değişkeni veya secret manager kullanılır.
 
-Once the system is running, you can access the following services via your web browser:
+## Claude Code ile çalışma
 
-| Service Name | Address | Function |
-|--------------|---------|----------|
-| HBYS API | http://localhost:8000 | Manages patient registration and sends HL7 orders to PACS. |
-| PACS API | http://localhost:8001 | Receives, parses, and acknowledges HL7 formatted requests from HBYS. |
-| Staff API | http://localhost:8002 | Simulates the staff network. Cannot directly access HBYS due to VLAN isolation. |
-| pgAdmin | http://localhost:5050 | Web browser interface for managing the PostgreSQL database. |
+`.claude/` altındaki yapılandırma otomatik yüklenir:
 
-### Database Access (pgAdmin)
-To manage the database visually via your browser:
-1. Go to `http://localhost:5050`
-2. Login with Email: `admin@hospital.local` and Password: `adminpassword`
-3. Click "Add Server" and use the following connection details:
-   - Host name: postgres
-   - Port: 5432
-   - Maintenance database: hospital_db
-   - Username: admin
-   - Password: adminpassword
+- `CLAUDE.md` — her oturumda okunur, proje kuralları
+- `.claude/rules/` — 6 kural dosyası (mimari, KVKK, entegrasyon, test, yazım, devops)
+- `.claude/skills/` — 6 alan bilgisi (patoloji, HBYS, LIS, PACS/DICOM, VNA, HL7)
+- `.claude/agents/` — 9 alt ajan
 
-## HL7 Integration & Testing
+### health-governance ajanı
 
-The project simulates the HL7 v2 communication protocol. To test the system:
+`health-governance` bir orkestratördür, kod yazmaz. PubMed MCP'sine bağlıdır.
+Kritik bir tasarım kararında (domain modeli, HL7 sözleşmesi, oto-onay sınırı,
+görüntü saklama) çağrılır; ilgili uzman ajanı `Task` ile devreye alır, çıkan
+tasarımı PubMed literatürüne ve standartlara (HL7 v2.5, DICOM, KVKK) karşı
+denetler, uyum raporu üretir.
 
-1. Add a New Patient to the Database:
-```bash
-curl -X POST "http://localhost:8000/patients/?first_name=Ahmet&last_name=Yilmaz&tc_no=123456789"
+PubMed MCP'si `.mcp.json` içinde tanımlıdır. Claude Code ilk açılışta bu
+sunucuya bağlanmak için onay ister.
+
+Kullanım:
+
+```
+> health-governance ajanını çalıştır: patoloji oto-onay eşiklerini denetle
+> pathology-specialist ile ek kesit akışını tasarla, sonra health-governance ile denetlet
 ```
 
-2. Send an Examination Order (MRI/X-Ray) to PACS:
-(This sends a real HL7 ORM^O01 message from HBYS to PACS, and receives an ACK confirmation)
-```bash
-curl -X POST "http://localhost:8000/order-pacs/1"
-```
+## Yazım kuralı
+
+Bu projede emoji kullanılmaz. Kodda, yorumda, commit mesajında, dokümanda
+veya sohbet yanıtında. Bkz. `.claude/rules/writing-style.md`.
+
+## Kritik domain kuralları
+
+Bunlar hasta güvenliği kurallarıdır ve domain katmanında zorlanır:
+
+1. **Barkod zinciri kopmaz.** Her B kodu bir M koduna, her S kodu bir B koduna
+   bağlıdır. Yanlış tipte barkod okutulursa işlem reddedilir.
+2. **Blok → lam varsayılan 1:1.** İkinci lam ancak gerekçe + talep eden hekim
+   ile üretilir. Ek kesit dokuyu geri alınamaz şekilde tüketir.
+3. **Görüntü silinmez.** Yeniden taranan lamın eski görüntüsü `Superseded`
+   olur, VNA'da kalır. Bir rapor o görüntüye dayanmış olabilir.
+4. **Geçersiz aşama geçişi reddedilir.** `Accessioned` durumundan doğrudan
+   `Reported` durumuna geçilemez.
+5. **Konsültasyon sorumluluk devretmez.** Nihai raporu yalnızca vakanın atanmış
+   patoloğu yazabilir.
+6. **MRN ömür boyu sabittir.** Hasta yıllar sonra dönse aynı MRN kullanılır.
+   Encounter her ziyarette yenidir.
+
+## Açık konu
+
+Takip kodlarının (M/B/S) tam hane kompozisyonu henüz kesinleşmedi. Kod
+`IAccessionCodeGenerator` arkasında soyutlandı; value object yalnızca şekli
+(önek + rakam) doğruluyor, sabit uzunluk dayatmıyor. Bkz. ARCHITECTURE.md
+AD-011.

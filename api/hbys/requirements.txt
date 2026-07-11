@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-requests
-SQLAlchemy
-psycopg2-binary
-hl7
-redis
